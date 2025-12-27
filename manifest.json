@@ -11,6 +11,7 @@
     "service_worker": "background.js"
   },
   "permissions": ["storage"],
+  "host_permissions": ["https://www.opole-mbp.sowa.pl/*"],
   "content_scripts": [
     {
       "matches": [
