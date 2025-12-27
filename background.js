@@ -5,7 +5,10 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || message.type !== "BIBLIOPOLIUM_FETCH") return false;
 
-  fetch(message.url)
+  const requestOptions =
+    message.options && typeof message.options === "object" ? message.options : {};
+
+  fetch(message.url, { credentials: "include", ...requestOptions })
     .then((response) =>
       response
         .text()

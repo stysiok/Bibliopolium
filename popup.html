@@ -8,16 +8,35 @@
   </head>
   <body>
     <main class="popup">
-      <h1>Bibliopolium</h1>
-      <p class="muted">Chrome extension starter</p>
-      <div class="row">
-        <label for="note">Quick note</label>
-        <textarea id="note" placeholder="Type and it will persist..."></textarea>
+      <div class="brand">
+        <span class="brand-mark">MBP</span>
+        <div>
+          <h1>Bibliopolium</h1>
+          <p class="muted">Logowanie do katalogu MBP</p>
+        </div>
       </div>
-      <div class="row">
-        <button id="save">Save</button>
-        <span id="status" class="muted" aria-live="polite"></span>
-      </div>
+      <form class="login" id="login-form">
+        <label for="email">Email</label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          autocomplete="email"
+          placeholder="wpisz email"
+          required
+        />
+        <label for="password">Haslo</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autocomplete="current-password"
+          placeholder="wpisz haslo"
+          required
+        />
+        <button type="submit" id="login">zaloguj sie</button>
+        <p class="hint">Przycisk otworzy strone logowania MBP.</p>
+      </form>
     </main>
     <script src="popup.js"></script>
   </body>
