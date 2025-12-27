@@ -1,5 +1,6 @@
 const BUTTON_ID = "bibliopolium-reserve-button";
 const STYLE_ID = "bibliopolium-reserve-style";
+const MODAL_ID = "bibliopolium-reserve-modal";
 const NO_RESULTS_TEXT =
   "Nie znaleziono żadnych rekordów pasujących do wybranej kombinacji kryteriów filtrujących";
 
@@ -42,6 +43,68 @@ const injectStyle = () => {
 
     .bibliopolium-reserve-button:disabled {
       opacity: 0.9;
+    }
+
+    .bibliopolium-reserve-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 15, 15, 0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2147483647;
+    }
+
+    .bibliopolium-reserve-modal {
+      width: min(420px, calc(100% - 32px));
+      background: #fff;
+      color: #1f1f1f;
+      border-radius: 18px;
+      padding: 22px 24px 20px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.2);
+      font-family: "Segoe UI", Tahoma, sans-serif;
+    }
+
+    .bibliopolium-reserve-modal h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .bibliopolium-reserve-modal p {
+      margin: 0 0 18px;
+      font-size: 14px;
+      line-height: 1.4;
+      color: #333;
+    }
+
+    .bibliopolium-reserve-modal .book-title {
+      font-weight: 600;
+    }
+
+    .bibliopolium-reserve-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .bibliopolium-reserve-action {
+      border: none;
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .bibliopolium-reserve-action.confirm {
+      background: #1f6fdb;
+      color: #fff;
+    }
+
+    .bibliopolium-reserve-action.cancel {
+      background: #c0392b;
+      color: #fff;
     }
   `;
   document.head.appendChild(style);
@@ -154,6 +217,63 @@ const checkAvailability = async (title, author, button) => {
   }
 };
 
+const closeReserveModal = () => {
+  const existing = document.getElementById(MODAL_ID);
+  if (existing) existing.remove();
+};
+
+const openReserveModal = ({ title, targetUrl }) => {
+  closeReserveModal();
+
+  const overlay = document.createElement("div");
+  overlay.id = MODAL_ID;
+  overlay.className = "bibliopolium-reserve-overlay";
+
+  const modal = document.createElement("div");
+  modal.className = "bibliopolium-reserve-modal";
+
+  const heading = document.createElement("h2");
+  heading.textContent = "Potwierdzenie rezerwacji";
+
+  const message = document.createElement("p");
+  message.textContent =
+    "Czy chcesz potwierdzic rezerwacje ksiazki w MBP?";
+
+  const bookTitle = document.createElement("span");
+  bookTitle.className = "book-title";
+  bookTitle.textContent = title;
+
+  message.append(document.createElement("br"), bookTitle);
+
+  const actions = document.createElement("div");
+  actions.className = "bibliopolium-reserve-actions";
+
+  const cancelButton = document.createElement("button");
+  cancelButton.type = "button";
+  cancelButton.className = "bibliopolium-reserve-action cancel";
+  cancelButton.textContent = "Anuluj";
+  cancelButton.addEventListener("click", closeReserveModal);
+
+  const confirmButton = document.createElement("button");
+  confirmButton.type = "button";
+  confirmButton.className = "bibliopolium-reserve-action confirm";
+  confirmButton.textContent = "Potwierdz rezerwacje";
+  confirmButton.addEventListener("click", () => {
+    window.open(targetUrl, "_blank", "noopener");
+    closeReserveModal();
+  });
+
+  actions.append(cancelButton, confirmButton);
+  modal.append(heading, message, actions);
+  overlay.appendChild(modal);
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closeReserveModal();
+  });
+
+  document.body.appendChild(overlay);
+};
+
 const addReserveButton = () => {
   if (document.getElementById(BUTTON_ID)) return true;
 
@@ -175,7 +295,9 @@ const addReserveButton = () => {
     const rawTitle = title.textContent || "";
     const rawAuthor = getAuthor();
     const targetUrl = buildSearchUrl(rawTitle, rawAuthor);
-    window.open(targetUrl, "_blank", "noopener");
+    if (button.classList.contains("is-available")) {
+      openReserveModal({ title: rawTitle, targetUrl });
+    }
   });
 
   title.insertAdjacentElement("afterend", button);
