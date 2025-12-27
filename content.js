@@ -82,6 +82,60 @@ const injectStyle = () => {
       font-weight: 600;
     }
 
+    .bibliopolium-book-details {
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 12px;
+      margin: 12px 0 16px;
+      align-items: start;
+    }
+
+    .bibliopolium-book-cover {
+      width: 64px;
+      height: 96px;
+      object-fit: cover;
+      border-radius: 10px;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+      background: #f1f1f1;
+    }
+
+    .bibliopolium-book-meta {
+      display: grid;
+      gap: 6px;
+      font-size: 12px;
+      color: #2b2b2b;
+    }
+
+    .bibliopolium-book-meta strong {
+      font-weight: 700;
+      color: #1f1f1f;
+    }
+
+    .bibliopolium-book-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .bibliopolium-book-tag {
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #f1f1f1;
+      font-size: 11px;
+      color: #333;
+    }
+
+    .bibliopolium-reserve-status {
+      margin: 8px 0 0;
+      font-size: 12px;
+      color: #1f1f1f;
+    }
+
+    .bibliopolium-reserve-status.is-error {
+      color: #8b1f1f;
+    }
+
     .bibliopolium-reserve-actions {
       display: flex;
       gap: 10px;
@@ -196,10 +250,101 @@ const fetchSearchResults = async (isbn) => {
   }
 };
 
+const parseMbpRecordDetails = (body) => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(body, "text/html");
+  const record = doc.querySelector(".record-details");
+  if (!record) return null;
+
+  const getTextList = (selector) =>
+    Array.from(record.querySelectorAll(selector))
+      .map((node) => node.textContent?.trim())
+      .filter(Boolean);
+
+  const title =
+    record.querySelector(".desc-o-mb-title")?.textContent?.trim() || "";
+  const cover =
+    record.querySelector(".record-thumb img")?.getAttribute("src") || "";
+
+  const authorLinks = Array.from(
+    record.querySelectorAll(".desc-descr-block-author .desc-descr-items a")
+  );
+  let authors = authorLinks
+    .filter((link) => {
+      const role = link.querySelector("span")?.textContent?.trim();
+      return role === "Autor";
+    })
+    .map((link) => {
+      const clone = link.cloneNode(true);
+      clone.querySelectorAll("span").forEach((span) => span.remove());
+      return clone.textContent?.trim();
+    })
+    .filter(Boolean);
+
+  if (!authors.length) {
+    authors = authorLinks
+      .map((link) => {
+        const clone = link.cloneNode(true);
+        clone.querySelectorAll("span").forEach((span) => span.remove());
+        return clone.textContent?.trim();
+      })
+      .filter(Boolean);
+  }
+
+  let origin = getTextList(
+    ".desc-descr-block-demographic .desc-descr-items a"
+  );
+  if (!origin.length) {
+    const publication = record
+      .querySelector(".desc-o-publ")
+      ?.textContent?.trim();
+    if (publication) {
+      const place = publication.split(":")[0]?.trim();
+      if (place) origin = [place];
+    }
+  }
+
+  return {
+    title,
+    cover,
+    authors,
+    formType: getTextList(".desc-descr-block-form .desc-descr-items a"),
+    origin,
+    tags: getTextList(".desc-descr-block-subject .desc-descr-items a"),
+    genre: getTextList(".desc-descr-block-genre .desc-descr-items a"),
+  };
+};
+
+const parseMbpReservationForm = (body) => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(body, "text/html");
+  const form = doc.querySelector('form[name^="booking-form-"]');
+  if (!form) return null;
+
+  const action = form.getAttribute("action") || "";
+  const resolvedAction = new URL(action, "https://www.opole-mbp.sowa.pl/").toString();
+  const inputs = Array.from(form.querySelectorAll('input[type="hidden"]'));
+
+  const fields = inputs.reduce((acc, input) => {
+    if (input.name) acc[input.name] = input.value || "";
+    return acc;
+  }, {});
+
+  return { action: resolvedAction, fields };
+};
+
 const checkAvailability = async (isbn, button) => {
   try {
     const body = await fetchSearchResults(isbn);
     const availability = parseAvailability(body);
+    const details = parseMbpRecordDetails(body);
+    if (details) {
+      button.dataset.mbpDetails = JSON.stringify(details);
+    }
+    const reservation = parseMbpReservationForm(body);
+    if (reservation) {
+      button.dataset.mbpReservation = JSON.stringify(reservation);
+    }
 
     if (!availability.available) {
       button.classList.remove("is-available");
@@ -226,7 +371,7 @@ const closeReserveModal = () => {
   if (existing) existing.remove();
 };
 
-const openReserveModal = ({ title, targetUrl }) => {
+const openReserveModal = ({ title, details, reservation }) => {
   closeReserveModal();
 
   const overlay = document.createElement("div");
@@ -249,6 +394,63 @@ const openReserveModal = ({ title, targetUrl }) => {
 
   message.append(document.createElement("br"), bookTitle);
 
+  let detailsBlock = null;
+  if (details) {
+    detailsBlock = document.createElement("div");
+    detailsBlock.className = "bibliopolium-book-details";
+
+    const cover = document.createElement("img");
+    cover.className = "bibliopolium-book-cover";
+    cover.alt = "Okladka ksiazki";
+    if (details.cover) cover.src = details.cover;
+
+    const meta = document.createElement("div");
+    meta.className = "bibliopolium-book-meta";
+
+    const authorLine = document.createElement("div");
+    authorLine.innerHTML = `<strong>Autor:</strong> ${
+      details.authors?.length ? details.authors.join(", ") : "Brak danych"
+    }`;
+
+    const formLine = document.createElement("div");
+    formLine.innerHTML = `<strong>Forma i typ:</strong> ${
+      details.formType?.length ? details.formType.join(", ") : "Brak danych"
+    }`;
+
+    const originLine = document.createElement("div");
+    originLine.innerHTML = `<strong>Pochodzenie:</strong> ${
+      details.origin?.length ? details.origin.join(", ") : "Brak danych"
+    }`;
+
+    const genreLine = document.createElement("div");
+    genreLine.innerHTML = `<strong>Gatunek:</strong> ${
+      details.genre?.length ? details.genre.join(", ") : "Brak danych"
+    }`;
+
+    meta.append(authorLine, formLine, originLine, genreLine);
+
+    if (details.tags?.length) {
+      const tagsWrap = document.createElement("div");
+      tagsWrap.className = "bibliopolium-book-tags";
+      details.tags.slice(0, 8).forEach((tag) => {
+        const chip = document.createElement("span");
+        chip.className = "bibliopolium-book-tag";
+        chip.textContent = tag;
+        tagsWrap.appendChild(chip);
+      });
+      meta.appendChild(tagsWrap);
+    }
+
+    detailsBlock.append(cover, meta);
+  } else {
+    detailsBlock = document.createElement("p");
+    detailsBlock.textContent =
+      "Brak szczegolow z katalogu MBP dla tej ksiazki.";
+  }
+
+  const status = document.createElement("p");
+  status.className = "bibliopolium-reserve-status";
+
   const actions = document.createElement("div");
   actions.className = "bibliopolium-reserve-actions";
 
@@ -263,12 +465,62 @@ const openReserveModal = ({ title, targetUrl }) => {
   confirmButton.className = "bibliopolium-reserve-action confirm";
   confirmButton.textContent = "Potwierdz rezerwacje";
   confirmButton.addEventListener("click", () => {
-    window.open(targetUrl, "_blank", "noopener");
-    closeReserveModal();
+    if (!reservation) {
+      status.textContent = "Brak danych do wypozyczenia z katalogu MBP.";
+      status.classList.add("is-error");
+      return;
+    }
+
+    confirmButton.disabled = true;
+    cancelButton.disabled = true;
+    status.textContent = "Wysylam zamowienie...";
+    status.classList.remove("is-error");
+
+    const payload = new URLSearchParams(reservation.fields).toString();
+    fetchViaBackground(reservation.action, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: payload,
+      redirect: "follow",
+    })
+      .then((html) => {
+        if (!html) {
+          throw new Error("Brak odpowiedzi serwera.");
+        }
+
+        const lowered = html.toLowerCase();
+        if (lowered.includes("zaloguj") || lowered.includes("logowanie")) {
+          throw new Error("Musisz byc zalogowany, aby wypozyczyc.");
+        }
+
+        if (
+          lowered.includes("wypo") ||
+          lowered.includes("rezerw") ||
+          lowered.includes("zamow")
+        ) {
+          status.textContent = "Zamowienie zostalo wyslane.";
+          setTimeout(closeReserveModal, 800);
+          return;
+        }
+
+        status.textContent = "Wyslano prosbe. Sprawdz konto MBP.";
+      })
+      .catch((error) => {
+        status.textContent = `Nie udalo sie wypozyczyc: ${
+          error?.message || "blad"
+        }`;
+        status.classList.add("is-error");
+      })
+      .finally(() => {
+        confirmButton.disabled = false;
+        cancelButton.disabled = false;
+      });
   });
 
   actions.append(cancelButton, confirmButton);
-  modal.append(heading, message, actions);
+  modal.append(heading, message, detailsBlock, status, actions);
   overlay.appendChild(modal);
 
   overlay.addEventListener("click", (event) => {
@@ -298,9 +550,24 @@ const addReserveButton = () => {
   button.addEventListener("click", () => {
     const rawTitle = title.textContent || "";
     const isbn = getIsbn();
-    const targetUrl = buildSearchUrl(isbn);
+    let details = null;
+    let reservation = null;
+    if (button.dataset.mbpDetails) {
+      try {
+        details = JSON.parse(button.dataset.mbpDetails);
+      } catch (error) {
+        details = null;
+      }
+    }
+    if (button.dataset.mbpReservation) {
+      try {
+        reservation = JSON.parse(button.dataset.mbpReservation);
+      } catch (error) {
+        reservation = null;
+      }
+    }
     if (button.classList.contains("is-available")) {
-      openReserveModal({ title: rawTitle, targetUrl });
+      openReserveModal({ title: rawTitle, details, reservation });
     }
   });
 
