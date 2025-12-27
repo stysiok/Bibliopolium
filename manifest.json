@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Bibliopolium",
+  "version": "0.1.0",
+  "description": "A starter Chrome extension project.",
+  "action": {
+    "default_title": "Bibliopolium",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://lubimyczytac.pl/ksiazka/*",
+        "http://lubimyczytac.pl/ksiazka/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
