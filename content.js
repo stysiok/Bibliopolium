@@ -110,20 +110,32 @@ const injectStyle = () => {
   document.head.appendChild(style);
 };
 
-const getAuthor = () => {
-  const authorMeta = document.querySelector('meta[property="books:author"]');
-  if (authorMeta && authorMeta.content) return authorMeta.content.trim();
+const getIsbn = () => {
+  const isbnMeta = document.querySelector('meta[property="books:isbn"]');
+  if (isbnMeta && isbnMeta.content) return isbnMeta.content.trim();
+
+  const detailList = document.querySelector("#book-details");
+  if (detailList) {
+    const terms = Array.from(detailList.querySelectorAll("dt"));
+    for (const term of terms) {
+      const label = term.textContent?.trim().toLowerCase();
+      if (label === "isbn:" || label === "isbn") {
+        const value = term.nextElementSibling;
+        if (value && value.tagName === "DD" && value.textContent) {
+          return value.textContent.trim();
+        }
+      }
+    }
+  }
+
   return "";
 };
 
-const buildSearchUrl = (title, author) => {
-  const encodedTitle = encodeURIComponent(title.trim());
-  const encodedAuthor = author ? encodeURIComponent(author.trim()) : "";
-  const authorFilter = encodedAuthor ? `_i_autor_${encodedAuthor}` : "";
+const buildSearchUrl = (isbn) => {
+  const encodedIsbn = encodeURIComponent(isbn.trim());
   return (
-    "https://www.opole-mbp.sowa.pl/index.php?KatID=0&typ=repl&plnk=__tytul_" +
-    encodedTitle +
-    authorFilter +
+    "https://www.opole-mbp.sowa.pl/index.php?KatID=0&typ=repl&plnk=__isbn_" +
+    encodedIsbn +
     "&sort=byscore&forigin=opole_mbp_ks&fform=Ksi%C4%85%C5%BCki&floans.branch=01"
   );
 };
@@ -168,9 +180,9 @@ const fetchViaBackground = (url) =>
     );
   });
 
-const fetchSearchResults = async (title, author) => {
-  const url = buildSearchUrl(title, author);
-  console.log("[Bibliopolium] Fetching availability:", { title, author, url });
+const fetchSearchResults = async (isbn) => {
+  const url = buildSearchUrl(isbn);
+  console.log("[Bibliopolium] Fetching availability:", { isbn, url });
   try {
     const text = await fetchViaBackground(url);
     console.log("[Bibliopolium] Availability response OK:", { url });
@@ -184,18 +196,10 @@ const fetchSearchResults = async (title, author) => {
   }
 };
 
-const checkAvailability = async (title, author, button) => {
+const checkAvailability = async (isbn, button) => {
   try {
-    let body = await fetchSearchResults(title, author);
-    let availability = parseAvailability(body);
-
-    if (author && !availability.available) {
-      body = await fetchSearchResults(title, "");
-      const fallbackAvailability = parseAvailability(body);
-      if (!fallbackAvailability.noResults) {
-        availability = fallbackAvailability;
-      }
-    }
+    const body = await fetchSearchResults(isbn);
+    const availability = parseAvailability(body);
 
     if (!availability.available) {
       button.classList.remove("is-available");
@@ -293,15 +297,22 @@ const addReserveButton = () => {
   button.disabled = true;
   button.addEventListener("click", () => {
     const rawTitle = title.textContent || "";
-    const rawAuthor = getAuthor();
-    const targetUrl = buildSearchUrl(rawTitle, rawAuthor);
+    const isbn = getIsbn();
+    const targetUrl = buildSearchUrl(isbn);
     if (button.classList.contains("is-available")) {
       openReserveModal({ title: rawTitle, targetUrl });
     }
   });
 
   title.insertAdjacentElement("afterend", button);
-  checkAvailability(title.textContent || "", getAuthor(), button);
+  const isbn = getIsbn();
+  if (!isbn) {
+    button.classList.add("is-unavailable");
+    button.textContent = "Brak ISBN";
+    button.disabled = false;
+    return true;
+  }
+  checkAvailability(isbn, button);
   return true;
 };
 
