@@ -136,10 +136,29 @@ const injectStyle = () => {
       color: #8b1f1f;
     }
 
+    .bibliopolium-reserve-account {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid #1f6f3d;
+      background: #1f6f3d;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      text-decoration: none;
+      width: fit-content;
+    }
+
     .bibliopolium-reserve-actions {
       display: flex;
       gap: 10px;
       justify-content: flex-end;
+    }
+
+    .bibliopolium-reserve-action.cancel {
+      margin-right: auto;
     }
 
     .bibliopolium-reserve-action {
@@ -371,7 +390,7 @@ const closeReserveModal = () => {
   if (existing) existing.remove();
 };
 
-const openReserveModal = ({ title, details, reservation }) => {
+const openReserveModal = ({ title, details, reservation, sourceButton }) => {
   closeReserveModal();
 
   const overlay = document.createElement("div");
@@ -460,6 +479,15 @@ const openReserveModal = ({ title, details, reservation }) => {
   cancelButton.textContent = "Anuluj";
   cancelButton.addEventListener("click", closeReserveModal);
 
+  const accountLink = document.createElement("a");
+  accountLink.className = "bibliopolium-reserve-account";
+  accountLink.href =
+    "https://www.opole-mbp.sowa.pl/index.php?KatID=0&typ=acc&id=reserved";
+  accountLink.target = "_blank";
+  accountLink.rel = "noopener";
+  accountLink.textContent = "Przejdz do konta MBP";
+  accountLink.style.display = "none";
+
   const confirmButton = document.createElement("button");
   confirmButton.type = "button";
   confirmButton.className = "bibliopolium-reserve-action confirm";
@@ -473,8 +501,9 @@ const openReserveModal = ({ title, details, reservation }) => {
 
     confirmButton.disabled = true;
     cancelButton.disabled = true;
-    status.textContent = "Wysylam zamowienie...";
+    status.textContent = "";
     status.classList.remove("is-error");
+    status.style.display = "none";
 
     const payload = new URLSearchParams(reservation.fields).toString();
     fetchViaBackground(reservation.action, {
@@ -500,12 +529,53 @@ const openReserveModal = ({ title, details, reservation }) => {
           lowered.includes("rezerw") ||
           lowered.includes("zamow")
         ) {
-          status.textContent = "Zamowienie zostalo wyslane.";
-          setTimeout(closeReserveModal, 800);
+          status.textContent = "";
+          status.style.display = "none";
+          accountLink.style.display = "inline-flex";
+          confirmButton.style.display = "none";
+          cancelButton.style.display = "inline-flex";
+          if (sourceButton) {
+            sourceButton.textContent = "Konto MBP";
+            sourceButton.classList.remove("is-available");
+            sourceButton.classList.add("is-unavailable");
+            sourceButton.disabled = false;
+            sourceButton.addEventListener(
+              "click",
+              () => {
+                window.open(
+                  "https://www.opole-mbp.sowa.pl/index.php?KatID=0&typ=acc",
+                  "_blank",
+                  "noopener"
+                );
+              },
+              { once: true }
+            );
+          }
           return;
         }
 
-        status.textContent = "Wyslano prosbe. Sprawdz konto MBP.";
+        status.textContent = "";
+        status.style.display = "none";
+        accountLink.style.display = "inline-flex";
+        confirmButton.style.display = "none";
+        cancelButton.style.display = "inline-flex";
+        if (sourceButton) {
+          sourceButton.textContent = "Konto MBP";
+          sourceButton.classList.remove("is-available");
+          sourceButton.classList.add("is-unavailable");
+          sourceButton.disabled = false;
+          sourceButton.addEventListener(
+            "click",
+            () => {
+              window.open(
+                "https://www.opole-mbp.sowa.pl/index.php?KatID=0&typ=acc",
+                "_blank",
+                "noopener"
+              );
+            },
+            { once: true }
+          );
+        }
       })
       .catch((error) => {
         status.textContent = `Nie udalo sie wypozyczyc: ${
@@ -519,7 +589,7 @@ const openReserveModal = ({ title, details, reservation }) => {
       });
   });
 
-  actions.append(cancelButton, confirmButton);
+  actions.append(cancelButton, accountLink, confirmButton);
   modal.append(heading, message, detailsBlock, status, actions);
   overlay.appendChild(modal);
 
@@ -567,7 +637,12 @@ const addReserveButton = () => {
       }
     }
     if (button.classList.contains("is-available")) {
-      openReserveModal({ title: rawTitle, details, reservation });
+      openReserveModal({
+        title: rawTitle,
+        details,
+        reservation,
+        sourceButton: button,
+      });
     }
   });
 
