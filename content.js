@@ -10,35 +10,56 @@ const injectStyle = () => {
   const style = document.createElement("style");
   style.id = STYLE_ID;
   style.textContent = `
+    :root {
+      --bibliopolium-primary: #1b5e20;
+      --bibliopolium-primary-ink: #ffffff;
+      --bibliopolium-surface: #ffffff;
+      --bibliopolium-surface-variant: #f3f4f6;
+      --bibliopolium-outline: #d1d5db;
+      --bibliopolium-on-surface: #111827;
+      --bibliopolium-on-surface-muted: #4b5563;
+      --bibliopolium-error: #b91c1c;
+      --bibliopolium-shadow: 0 18px 40px rgba(17, 24, 39, 0.18);
+      --bibliopolium-radius: 16px;
+      font-family: "Roboto", "Segoe UI", Tahoma, sans-serif;
+    }
+
     .bibliopolium-reserve-button {
       margin-left: 12px;
-      padding: 6px 14px;
+      padding: 8px 16px;
       border-radius: 999px;
-      border: 1px solid #2b2b2b;
-      background: #fff;
-      color: #2b2b2b;
+      border: 1px solid var(--bibliopolium-outline);
+      background: var(--bibliopolium-surface);
+      color: var(--bibliopolium-on-surface);
       font-size: 12px;
       font-weight: 600;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.02em;
       text-transform: uppercase;
       cursor: pointer;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+      transition: transform 0.15s ease, box-shadow 0.15s ease,
+        background 0.15s ease;
     }
 
     .bibliopolium-reserve-button:hover {
-      background: #f1f1f1;
+      background: #f8fafc;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+      transform: translateY(-1px);
     }
 
     .bibliopolium-reserve-button.is-available {
-      border-color: #1f6f3d;
-      background: #1f6f3d;
-      color: #fff;
+      border-color: transparent;
+      background: var(--bibliopolium-primary);
+      color: var(--bibliopolium-primary-ink);
+      box-shadow: 0 6px 18px rgba(27, 94, 32, 0.35);
     }
 
     .bibliopolium-reserve-button.is-unavailable {
-      border-color: #8b1f1f;
-      background: #8b1f1f;
+      border-color: transparent;
+      background: #6b7280;
       color: #fff;
       cursor: not-allowed;
+      box-shadow: none;
     }
 
     .bibliopolium-reserve-button:disabled {
@@ -48,7 +69,7 @@ const injectStyle = () => {
     .bibliopolium-reserve-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(15, 15, 15, 0.55);
+      background: rgba(15, 23, 42, 0.52);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -56,30 +77,32 @@ const injectStyle = () => {
     }
 
     .bibliopolium-reserve-modal {
-      width: min(420px, calc(100% - 32px));
-      background: #fff;
-      color: #1f1f1f;
-      border-radius: 18px;
+      width: min(440px, calc(100% - 32px));
+      background: var(--bibliopolium-surface);
+      color: var(--bibliopolium-on-surface);
+      border-radius: var(--bibliopolium-radius);
       padding: 22px 24px 20px;
-      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.2);
-      font-family: "Segoe UI", Tahoma, sans-serif;
+      box-shadow: var(--bibliopolium-shadow);
+      font-family: "Roboto", "Segoe UI", Tahoma, sans-serif;
     }
 
     .bibliopolium-reserve-modal h2 {
       margin: 0 0 10px;
       font-size: 18px;
       font-weight: 700;
+      letter-spacing: 0.01em;
     }
 
     .bibliopolium-reserve-modal p {
-      margin: 0 0 18px;
-      font-size: 14px;
-      line-height: 1.4;
-      color: #333;
+      margin: 0 0 16px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--bibliopolium-on-surface-muted);
     }
 
     .bibliopolium-reserve-modal .book-title {
       font-weight: 600;
+      color: var(--bibliopolium-on-surface);
     }
 
     .bibliopolium-book-details {
@@ -94,21 +117,21 @@ const injectStyle = () => {
       width: 64px;
       height: 96px;
       object-fit: cover;
-      border-radius: 10px;
-      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
-      background: #f1f1f1;
+      border-radius: 12px;
+      box-shadow: 0 6px 16px rgba(17, 24, 39, 0.18);
+      background: var(--bibliopolium-surface-variant);
     }
 
     .bibliopolium-book-meta {
       display: grid;
       gap: 6px;
       font-size: 12px;
-      color: #2b2b2b;
+      color: var(--bibliopolium-on-surface-muted);
     }
 
     .bibliopolium-book-meta strong {
       font-weight: 700;
-      color: #1f1f1f;
+      color: var(--bibliopolium-on-surface);
     }
 
     .bibliopolium-book-tags {
@@ -119,42 +142,43 @@ const injectStyle = () => {
     }
 
     .bibliopolium-book-tag {
-      padding: 2px 8px;
+      padding: 4px 10px;
       border-radius: 999px;
-      background: #f1f1f1;
+      background: var(--bibliopolium-surface-variant);
       font-size: 11px;
-      color: #333;
+      color: var(--bibliopolium-on-surface-muted);
     }
 
     .bibliopolium-reserve-status {
       margin: 8px 0 0;
       font-size: 12px;
-      color: #1f1f1f;
+      color: var(--bibliopolium-on-surface);
     }
 
     .bibliopolium-reserve-status.is-error {
-      color: #8b1f1f;
+      color: var(--bibliopolium-error);
     }
 
     .bibliopolium-reserve-account {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 6px 12px;
+      padding: 8px 14px;
       border-radius: 999px;
-      border: 1px solid #1f6f3d;
-      background: #1f6f3d;
-      color: #fff;
+      border: none;
+      background: var(--bibliopolium-primary);
+      color: var(--bibliopolium-primary-ink);
       font-size: 12px;
       font-weight: 700;
       text-decoration: none;
-      width: fit-content;
+      box-shadow: 0 6px 16px rgba(27, 94, 32, 0.3);
     }
 
     .bibliopolium-reserve-actions {
       display: flex;
       gap: 10px;
       justify-content: flex-end;
+      align-items: center;
     }
 
     .bibliopolium-reserve-action.cancel {
@@ -165,18 +189,20 @@ const injectStyle = () => {
       border: none;
       border-radius: 999px;
       padding: 8px 16px;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
       cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
 
     .bibliopolium-reserve-action.confirm {
-      background: #1f6fdb;
-      color: #fff;
+      background: var(--bibliopolium-primary);
+      color: var(--bibliopolium-primary-ink);
+      box-shadow: 0 6px 16px rgba(27, 94, 32, 0.3);
     }
 
     .bibliopolium-reserve-action.cancel {
-      background: #c0392b;
+      background: #ef4444;
       color: #fff;
     }
   `;
