@@ -279,6 +279,24 @@ const fetchViaBackground = (url) =>
     );
   });
 
+const loginViaBackground = (url, options) =>
+  new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      { type: "BIBLIOPOLIUM_LOGIN", url, options },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        if (!response || !response.ok) {
+          reject(new Error(response?.error || "Login request failed."));
+          return;
+        }
+        resolve(response.text);
+      }
+    );
+  });
+
 const fetchSearchResults = async (isbn) => {
   const url = buildSearchUrl(isbn);
   console.log("[Bibliopolium] Fetching availability:", { isbn, url });
@@ -376,6 +394,48 @@ const parseMbpReservationForm = (body) => {
   }, {});
 
   return { action: resolvedAction, fields };
+};
+
+const extractLoginHiddenInputs = (html) => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+  const form = doc.querySelector('form[name="log"]');
+  if (!form) return {};
+  const hiddenInputs = Array.from(form.querySelectorAll('input[type="hidden"]'));
+  return hiddenInputs.reduce((acc, input) => {
+    if (input.name) acc[input.name] = input.value || "";
+    return acc;
+  }, {});
+};
+
+const buildLoginPayload = (email, password, hiddenInputs) => {
+  const payload = new URLSearchParams();
+  Object.entries(hiddenInputs || {}).forEach(([key, value]) => {
+    payload.set(key, value ?? "");
+  });
+  payload.set("swww_user", email);
+  payload.set("swww_pass", password);
+  return payload.toString();
+};
+
+const evaluateLoginResult = (html) => {
+  if (!html) return { ok: false, reason: "Brak odpowiedzi serwera." };
+  const hasLoginForm =
+    html.includes('name="log"') ||
+    html.includes('id="acc-login-box"') ||
+    html.includes("Zaloguj się");
+  const hasLogout =
+    html.includes("Wyloguj") ||
+    html.includes("logout") ||
+    html.includes("acc-logout");
+
+  if (hasLogout && !hasLoginForm) {
+    return { ok: true };
+  }
+  if (hasLoginForm) {
+    return { ok: false, reason: "Niepoprawny login lub haslo." };
+  }
+  return { ok: false, reason: "Nie udalo sie potwierdzic logowania." };
 };
 
 const checkAvailability = async (isbn, button) => {
@@ -518,10 +578,162 @@ const openReserveModal = ({ title, details, reservation, sourceButton }) => {
   confirmButton.type = "button";
   confirmButton.className = "bibliopolium-reserve-action confirm";
   confirmButton.textContent = "Potwierdz rezerwacje";
+
+  const loginForm = document.createElement("form");
+  loginForm.style.display = "none";
+  loginForm.style.margin = "12px 0 0";
+  loginForm.className = "bibliopolium-login-form";
+
+  const loginEmail = document.createElement("input");
+  loginEmail.type = "email";
+  loginEmail.placeholder = "email";
+  loginEmail.autocomplete = "email";
+  loginEmail.required = true;
+  loginEmail.style.width = "100%";
+  loginEmail.style.marginBottom = "8px";
+
+  const loginPassword = document.createElement("input");
+  loginPassword.type = "password";
+  loginPassword.placeholder = "haslo";
+  loginPassword.autocomplete = "current-password";
+  loginPassword.required = true;
+  loginPassword.style.width = "100%";
+
+  loginForm.append(loginEmail, loginPassword);
+
+  let pendingReservation = null;
+
+  const submitReservation = (reservationPayload) => {
+    const payload = new URLSearchParams(reservationPayload.fields).toString();
+    return fetchViaBackground(reservationPayload.action, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: payload,
+      redirect: "follow",
+    });
+  };
+
+  const loginAndReserve = () => {
+    if (!pendingReservation) return;
+
+    console.log("[Bibliopolium] Login attempt started.", {
+      emailLength: loginEmail.value.trim().length,
+      hasPassword: Boolean(loginPassword.value),
+    });
+    status.textContent = "Logowanie w toku...";
+    status.classList.remove("is-error");
+    status.style.display = "block";
+
+    return (() => {
+      const loginPageUrl =
+        "https://www.opole-mbp.sowa.pl/index.php?KatID=0&typ=acc&id=info";
+      const loginPostUrl = "https://www.opole-mbp.sowa.pl/index.php?typ=acc";
+      console.log("[Bibliopolium] Login request start.", {
+        hasEmail: Boolean(loginEmail.value.trim()),
+      });
+      return loginViaBackground(loginPageUrl, { method: "GET" })
+        .then((loginPageHtml) => {
+          console.log("[Bibliopolium] Login page fetched.", {
+            length: loginPageHtml?.length || 0,
+          });
+          const hiddenInputs = extractLoginHiddenInputs(loginPageHtml);
+          console.log("[Bibliopolium] Login hidden inputs.", {
+            keys: Object.keys(hiddenInputs),
+          });
+          const body = buildLoginPayload(
+            loginEmail.value.trim(),
+            loginPassword.value,
+            hiddenInputs
+          );
+          return loginViaBackground(loginPostUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body,
+            redirect: "follow",
+          });
+        });
+    })()
+      .then((loginResponseHtml) => {
+        const result = evaluateLoginResult(loginResponseHtml);
+        console.log("[Bibliopolium] Login response analyzed.", {
+          ok: result.ok,
+          length: loginResponseHtml?.length || 0,
+        });
+        if (!result.ok) {
+          throw new Error(result.reason || "Niepoprawny login lub haslo.");
+        }
+        return submitReservation(pendingReservation);
+      })
+      .then((reservationHtml) => {
+        const lowered = reservationHtml.toLowerCase();
+        console.log("[Bibliopolium] Reservation after login response.", {
+          length: reservationHtml?.length || 0,
+          hasKeywords:
+            lowered.includes("wypo") ||
+            lowered.includes("rezerw") ||
+            lowered.includes("zamow"),
+        });
+        if (
+          lowered.includes("wypo") ||
+          lowered.includes("rezerw") ||
+          lowered.includes("zamow")
+        ) {
+          status.textContent = "";
+          status.style.display = "none";
+          accountLink.style.display = "none";
+          confirmButton.textContent = "Idz do MBP";
+          confirmButton.disabled = false;
+          confirmButton.style.display = "inline-flex";
+          confirmButton.addEventListener(
+            "click",
+            () => {
+              window.open(
+                "https://www.opole-mbp.sowa.pl/index.php?KatID=0&typ=acc&id=reserved",
+                "_blank",
+                "noopener"
+              );
+            },
+            { once: true }
+          );
+          cancelButton.style.display = "inline-flex";
+          loginForm.style.display = "none";
+          pendingReservation = null;
+          return;
+        }
+
+        status.textContent = "";
+        status.style.display = "none";
+        confirmButton.style.display = "inline-flex";
+        cancelButton.style.display = "inline-flex";
+      })
+      .catch((error) => {
+        status.textContent = `Nie udalo sie zalogowac: ${
+          error?.message || "blad"
+        }`;
+        status.classList.add("is-error");
+        status.style.display = "block";
+      })
+      .finally(() => {
+        confirmButton.disabled = false;
+        cancelButton.disabled = false;
+      });
+  };
+
   confirmButton.addEventListener("click", () => {
     if (!reservation) {
       status.textContent = "Brak danych do wypozyczenia z katalogu MBP.";
       status.classList.add("is-error");
+      return;
+    }
+
+    if (pendingReservation && loginForm.style.display === "block") {
+      confirmButton.disabled = true;
+      cancelButton.disabled = true;
+      loginAndReserve();
       return;
     }
 
@@ -531,23 +743,32 @@ const openReserveModal = ({ title, details, reservation, sourceButton }) => {
     status.classList.remove("is-error");
     status.style.display = "none";
 
-    const payload = new URLSearchParams(reservation.fields).toString();
-    fetchViaBackground(reservation.action, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: payload,
-      redirect: "follow",
-    })
+    submitReservation(reservation)
       .then((html) => {
         if (!html) {
           throw new Error("Brak odpowiedzi serwera.");
         }
 
         const lowered = html.toLowerCase();
+        console.log("[Bibliopolium] Reservation response.", {
+          length: html?.length || 0,
+          hasLoginPrompt:
+            lowered.includes("zaloguj") || lowered.includes("logowanie"),
+          hasKeywords:
+            lowered.includes("wypo") ||
+            lowered.includes("rezerw") ||
+            lowered.includes("zamow"),
+        });
         if (lowered.includes("zaloguj") || lowered.includes("logowanie")) {
-          throw new Error("Musisz byc zalogowany, aby wypozyczyc.");
+          status.textContent =
+            "Musisz sie zalogowac w MBP, aby wypozyczyc ksiazke.";
+          status.classList.add("is-error");
+          status.style.display = "block";
+          confirmButton.textContent = "Zaloguj sie i potwierdz";
+          confirmButton.disabled = false;
+          loginForm.style.display = "block";
+          pendingReservation = reservation;
+          return;
         }
 
         if (
@@ -557,8 +778,21 @@ const openReserveModal = ({ title, details, reservation, sourceButton }) => {
         ) {
           status.textContent = "";
           status.style.display = "none";
-          accountLink.style.display = "inline-flex";
-          confirmButton.style.display = "none";
+          accountLink.style.display = "none";
+          confirmButton.textContent = "Idz do MBP";
+          confirmButton.disabled = false;
+          confirmButton.style.display = "inline-flex";
+          confirmButton.addEventListener(
+            "click",
+            () => {
+              window.open(
+                "https://www.opole-mbp.sowa.pl/index.php?KatID=0&typ=acc&id=reserved",
+                "_blank",
+                "noopener"
+              );
+            },
+            { once: true }
+          );
           cancelButton.style.display = "inline-flex";
           if (sourceButton) {
             sourceButton.textContent = "Konto MBP";
@@ -582,8 +816,21 @@ const openReserveModal = ({ title, details, reservation, sourceButton }) => {
 
         status.textContent = "";
         status.style.display = "none";
-        accountLink.style.display = "inline-flex";
-        confirmButton.style.display = "none";
+        accountLink.style.display = "none";
+        confirmButton.textContent = "Idz do MBP";
+        confirmButton.disabled = false;
+        confirmButton.style.display = "inline-flex";
+        confirmButton.addEventListener(
+          "click",
+          () => {
+            window.open(
+              "https://www.opole-mbp.sowa.pl/index.php?KatID=0&typ=acc&id=reserved",
+              "_blank",
+              "noopener"
+            );
+          },
+          { once: true }
+        );
         cancelButton.style.display = "inline-flex";
         if (sourceButton) {
           sourceButton.textContent = "Konto MBP";
@@ -608,6 +855,7 @@ const openReserveModal = ({ title, details, reservation, sourceButton }) => {
           error?.message || "blad"
         }`;
         status.classList.add("is-error");
+        status.style.display = "block";
       })
       .finally(() => {
         confirmButton.disabled = false;
@@ -616,7 +864,7 @@ const openReserveModal = ({ title, details, reservation, sourceButton }) => {
   });
 
   actions.append(cancelButton, accountLink, confirmButton);
-  modal.append(heading, message, detailsBlock, status, actions);
+  modal.append(heading, message, detailsBlock, loginForm, status, actions);
   overlay.appendChild(modal);
 
   overlay.addEventListener("click", (event) => {

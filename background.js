@@ -3,10 +3,19 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (!message || message.type !== "BIBLIOPOLIUM_FETCH") return false;
+  if (!message) return false;
+
+  if (
+    message.type !== "BIBLIOPOLIUM_FETCH" &&
+    message.type !== "BIBLIOPOLIUM_LOGIN"
+  ) {
+    return false;
+  }
 
   const requestOptions =
-    message.options && typeof message.options === "object" ? message.options : {};
+    message.options && typeof message.options === "object"
+      ? message.options
+      : {};
 
   fetch(message.url, { credentials: "include", ...requestOptions })
     .then((response) =>
