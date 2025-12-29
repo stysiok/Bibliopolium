@@ -261,10 +261,10 @@ const parseAvailability = (body) => {
   return { available: true, noResults: false };
 };
 
-const fetchViaBackground = (url) =>
+const fetchViaBackground = (url, options) =>
   new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
-      { type: "BIBLIOPOLIUM_FETCH", url },
+      { type: "BIBLIOPOLIUM_FETCH", url, options },
       (response) => {
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
