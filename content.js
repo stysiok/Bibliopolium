@@ -62,6 +62,14 @@ const injectStyle = () => {
       box-shadow: none;
     }
 
+    .bibliopolium-reserve-button.is-account {
+      border-color: transparent;
+      background: #2563eb;
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(37, 99, 235, 0.3);
+    }
+
     .bibliopolium-reserve-button:disabled {
       opacity: 0.9;
     }
@@ -831,8 +839,8 @@ const openReserveModal = ({ title, details, reservation, sourceButton }) => {
           cancelButton.style.display = "inline-flex";
           if (sourceButton) {
             sourceButton.textContent = "Konto MBP";
-            sourceButton.classList.remove("is-available");
-            sourceButton.classList.add("is-unavailable");
+            sourceButton.classList.remove("is-available", "is-unavailable");
+            sourceButton.classList.add("is-account");
             sourceButton.disabled = false;
             sourceButton.addEventListener(
               "click",
@@ -869,8 +877,8 @@ const openReserveModal = ({ title, details, reservation, sourceButton }) => {
         cancelButton.style.display = "inline-flex";
         if (sourceButton) {
           sourceButton.textContent = "Konto MBP";
-          sourceButton.classList.remove("is-available");
-          sourceButton.classList.add("is-unavailable");
+          sourceButton.classList.remove("is-available", "is-unavailable");
+          sourceButton.classList.add("is-account");
           sourceButton.disabled = false;
           sourceButton.addEventListener(
             "click",
