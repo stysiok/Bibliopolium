@@ -239,6 +239,8 @@ const buildSearchUrl = (isbn) => {
   );
 };
 
+const TARGET_AGENDA = "01";
+
 const parseAvailability = (body) => {
   const hasNoResults =
     body.includes('id="no-results"') || body.includes(NO_RESULTS_TEXT);
@@ -246,17 +248,27 @@ const parseAvailability = (body) => {
     return { available: false, noResults: true };
   }
 
-  const hasAvailable =
-    /record-av-agenda-button-available/i.test(body) ||
-    body.includes('data-opacit-best="available"') ||
-    body.includes("av-status-available");
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(body, "text/html");
+  const rows = Array.from(
+    doc.querySelectorAll(".record-availability-details .record-av-details-row")
+  );
+  const agendaRow = rows.find((row) =>
+    row.querySelector(`div[data-agenda="${TARGET_AGENDA}"]`)
+  );
+
+  if (agendaRow) {
+    const hasAvailable = Boolean(
+      agendaRow.querySelector(".record-av-agenda-button-available")
+    );
+    return { available: hasAvailable, noResults: false };
+  }
 
   const hasAnyStatus =
     body.includes('data-opacit-best="') ||
     body.includes("av-status-") ||
     body.includes("record-availability");
 
-  if (hasAvailable) return { available: true, noResults: false };
   if (hasAnyStatus) return { available: false, noResults: false };
   return { available: true, noResults: false };
 };
@@ -381,7 +393,12 @@ const parseMbpRecordDetails = (body) => {
 const parseMbpReservationForm = (body) => {
   const parser = new DOMParser();
   const doc = parser.parseFromString(body, "text/html");
-  const form = doc.querySelector('form[name^="booking-form-"]');
+  const forms = Array.from(doc.querySelectorAll('form[name^="booking-form-"]'));
+  if (!forms.length) return null;
+  const form =
+    forms.find((candidate) =>
+      candidate.querySelector(`input[name="agenda"][value="${TARGET_AGENDA}"]`)
+    ) || forms[0];
   if (!form) return null;
 
   const action = form.getAttribute("action") || "";
