@@ -291,6 +291,24 @@ const fetchViaBackground = (url, options) =>
     );
   });
 
+const reserveViaBackground = (url, options) =>
+  new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      { type: "BIBLIOPOLIUM_RESERVE", url, options },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        if (!response || !response.ok) {
+          reject(new Error(response?.error || "Reservation request failed."));
+          return;
+        }
+        resolve(response.text);
+      }
+    );
+  });
+
 const loginViaBackground = (url, options) =>
   new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
@@ -622,7 +640,7 @@ const openReserveModal = ({ title, details, reservation, sourceButton }) => {
 
   const submitReservation = (reservationPayload) => {
     const payload = new URLSearchParams(reservationPayload.fields).toString();
-    return fetchViaBackground(reservationPayload.action, {
+    return reserveViaBackground(reservationPayload.action, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",

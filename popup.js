@@ -1,9 +1,12 @@
 const loginForm = document.getElementById("login-form");
 const loginButton = document.getElementById("login");
 const hint = document.querySelector(".hint");
+const mockToggle = document.getElementById("mock-reservation");
+const mockStatus = document.getElementById("mock-status");
 const LOGIN_URL =
   "https://www.opole-mbp.sowa.pl/index.php?KatID=0&typ=acc&id=info";
 const LOGIN_POST_URL = "https://www.opole-mbp.sowa.pl/index.php?typ=acc";
+const MOCK_STORAGE_KEY = "bibliopoliumMockReservation";
 
 const fetchViaBackground = (url, options) =>
   new Promise((resolve, reject) => {
@@ -70,6 +73,32 @@ const evaluateLoginResult = (html) => {
   }
   return { ok: false, reason: "Nie udało się potwierdzić logowania." };
 };
+
+const setMockStatus = (enabled) => {
+  if (!mockStatus) return;
+  mockStatus.textContent = enabled
+    ? "Zamowienia beda symulowane."
+    : "Zamowienia beda wysylane do MBP.";
+};
+
+const loadMockSetting = () => {
+  if (!mockToggle) return;
+  chrome.storage.sync.get({ [MOCK_STORAGE_KEY]: false }, (result) => {
+    const enabled = Boolean(result[MOCK_STORAGE_KEY]);
+    mockToggle.checked = enabled;
+    setMockStatus(enabled);
+  });
+};
+
+if (mockToggle) {
+  mockToggle.addEventListener("change", () => {
+    const enabled = mockToggle.checked;
+    chrome.storage.sync.set({ [MOCK_STORAGE_KEY]: enabled }, () => {
+      setMockStatus(enabled);
+    });
+  });
+  loadMockSetting();
+}
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
