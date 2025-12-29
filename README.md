@@ -1,5 +1,7 @@
 # Bibliopolium
 
+![Bibliopolium icon](icons/icon128.png)
+
 Chrome extension that helps check availability in the MBP Opole catalog, review book details, and place orders directly from Lubimyczytac.pl book pages.
 
 ## Features
@@ -38,6 +40,8 @@ Chrome extension that helps check availability in the MBP Opole catalog, review 
 ---
 
 # Bibliopolium (PL)
+
+![Bibliopolium icon](icons/icon128.png)
 
 Rozszerzenie Chrome, ktore pomaga sprawdzac dostepnosc w katalogu MBP Opole, podgladac szczegoly ksiazek i skladac zamowienia bezposrednio z kart ksiazek na Lubimyczytac.pl.
 
