@@ -56,9 +56,17 @@ const injectStyle = () => {
 
     .bibliopolium-reserve-button.is-unavailable {
       border-color: transparent;
-      background: #6b7280;
+      background: #facc15;
+      color: #1f2937;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(250, 204, 21, 0.3);
+    }
+
+    .bibliopolium-reserve-button.is-missing {
+      border-color: transparent;
+      background: #9ca3af;
       color: #fff;
-      cursor: not-allowed;
+      cursor: pointer;
       box-shadow: none;
     }
 
@@ -439,6 +447,36 @@ const parseMbpReservationForm = (body) => {
   return { action: resolvedAction, fields };
 };
 
+const parseQueueCountForAgenda = (body) => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(body, "text/html");
+  const agendaRow = doc
+    .querySelector(
+      `.record-availability-details .record-av-details-row div[data-agenda="${TARGET_AGENDA}"]`
+    )
+    ?.closest(".record-av-details-row");
+
+  if (!agendaRow) return null;
+
+  const text = agendaRow.textContent?.replace(/\s+/g, " ").trim() || "";
+  const patterns = [
+    /kolejk\w*[^0-9]{0,20}(\d+)/i,
+    /oczekuj\w*[^0-9]{0,20}(\d+)/i,
+    /rezerwac\w*[^0-9]{0,20}(\d+)/i,
+    /zam[oó]w\w*[^0-9]{0,20}(\d+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const count = Number.parseInt(match[1], 10);
+      if (Number.isFinite(count)) return count;
+    }
+  }
+
+  return null;
+};
+
 const extractLoginHiddenInputs = (html) => {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
@@ -493,23 +531,36 @@ const checkAvailability = async (isbn, button) => {
     if (reservation) {
       button.dataset.mbpReservation = JSON.stringify(reservation);
     }
+    const queueCount = parseQueueCountForAgenda(body);
+    if (Number.isFinite(queueCount)) {
+      button.dataset.mbpQueue = String(queueCount);
+    } else {
+      delete button.dataset.mbpQueue;
+    }
 
     if (!availability.available) {
       button.classList.remove("is-available");
-      button.classList.add("is-unavailable");
-      button.textContent = "Niedostępna";
+      if (availability.noResults) {
+        button.classList.remove("is-unavailable");
+        button.classList.add("is-missing");
+        button.textContent = "Brak w MBP";
+      } else {
+        button.classList.remove("is-missing");
+        button.classList.add("is-unavailable");
+        button.textContent = "Zarezerwowana";
+      }
       button.disabled = false;
       return;
     }
 
-    button.classList.remove("is-unavailable");
+    button.classList.remove("is-unavailable", "is-missing");
     button.classList.add("is-available");
     button.textContent = "Zarezerwuj";
     button.disabled = false;
   } catch (error) {
-    button.classList.remove("is-available");
+    button.classList.remove("is-available", "is-missing");
     button.classList.add("is-unavailable");
-    button.textContent = "Niedostępna";
+    button.textContent = "Zarezerwowana";
     button.disabled = false;
   }
 };
@@ -519,7 +570,23 @@ const closeReserveModal = () => {
   if (existing) existing.remove();
 };
 
-const openReserveModal = ({ title, details, reservation, sourceButton }) => {
+const buildRecordUrl = (reservation) => {
+  const recordId = reservation?.fields?.idw;
+  if (!recordId) return "";
+  return (
+    "https://www.opole-mbp.sowa.pl/index.php?KatID=0&typ=record&001=" +
+    encodeURIComponent(recordId)
+  );
+};
+
+const openReserveModal = ({
+  title,
+  details,
+  reservation,
+  sourceButton,
+  isAvailable,
+  queueCount,
+}) => {
   closeReserveModal();
 
   const overlay = document.createElement("div");
@@ -533,8 +600,9 @@ const openReserveModal = ({ title, details, reservation, sourceButton }) => {
   heading.textContent = "Potwierdzenie rezerwacji";
 
   const message = document.createElement("p");
-  message.textContent =
-    "Czy chcesz potwierdzic rezerwacje ksiazki w MBP?";
+  message.textContent = isAvailable
+    ? "Czy chcesz potwierdzic rezerwacje ksiazki w MBP?"
+    : "Ta ksiazka jest obecnie niedostepna w Wypozyczalni centralnej.";
 
   const bookTitle = document.createElement("span");
   bookTitle.className = "book-title";
@@ -576,6 +644,12 @@ const openReserveModal = ({ title, details, reservation, sourceButton }) => {
     }`;
 
     meta.append(authorLine, formLine, originLine, genreLine);
+
+    if (Number.isFinite(queueCount)) {
+      const queueLine = document.createElement("div");
+      queueLine.innerHTML = `<strong>Kolejka:</strong> ${queueCount} osob`;
+      meta.append(queueLine);
+    }
 
     if (details.tags?.length) {
       const tagsWrap = document.createElement("div");
@@ -620,7 +694,9 @@ const openReserveModal = ({ title, details, reservation, sourceButton }) => {
   const confirmButton = document.createElement("button");
   confirmButton.type = "button";
   confirmButton.className = "bibliopolium-reserve-action confirm";
-  confirmButton.textContent = "Potwierdz rezerwacje";
+  confirmButton.textContent = isAvailable
+    ? "Potwierdz rezerwacje"
+    : "Otworz w MBP";
 
   const loginForm = document.createElement("form");
   loginForm.style.display = "none";
@@ -645,6 +721,8 @@ const openReserveModal = ({ title, details, reservation, sourceButton }) => {
   loginForm.append(loginEmail, loginPassword);
 
   let pendingReservation = null;
+
+  const recordUrl = buildSearchUrl(getIsbn());
 
   const submitReservation = (reservationPayload) => {
     const payload = new URLSearchParams(reservationPayload.fields).toString();
@@ -767,6 +845,11 @@ const openReserveModal = ({ title, details, reservation, sourceButton }) => {
   };
 
   confirmButton.addEventListener("click", () => {
+    if (!isAvailable) {
+      window.open(recordUrl, "_blank", "noopener");
+      return;
+    }
+
     if (!reservation) {
       status.textContent = "Brak danych do wypozyczenia z katalogu MBP.";
       status.classList.add("is-error");
@@ -939,6 +1022,7 @@ const addReserveButton = () => {
     const isbn = getIsbn();
     let details = null;
     let reservation = null;
+    let queueCount = null;
     if (button.dataset.mbpDetails) {
       try {
         details = JSON.parse(button.dataset.mbpDetails);
@@ -953,12 +1037,26 @@ const addReserveButton = () => {
         reservation = null;
       }
     }
-    if (button.classList.contains("is-available")) {
+    if (button.dataset.mbpQueue) {
+      const parsedQueue = Number.parseInt(button.dataset.mbpQueue, 10);
+      if (Number.isFinite(parsedQueue)) {
+        queueCount = parsedQueue;
+      }
+    }
+    const isAvailable = button.classList.contains("is-available");
+    const isMissing = button.classList.contains("is-missing");
+    if (isMissing) {
+      window.open(buildSearchUrl(isbn), "_blank", "noopener");
+      return;
+    }
+    if (isAvailable || button.classList.contains("is-unavailable")) {
       openReserveModal({
         title: rawTitle,
         details,
         reservation,
         sourceButton: button,
+        isAvailable,
+        queueCount,
       });
     }
   });
